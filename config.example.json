@@ -1,0 +1,9 @@
+{
+  "channels": {
+    "feishu": {
+      "appId": "cli_xxxxxxxxxxxx",
+      "appSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "domain": "feishu"
+    }
+  }
+}

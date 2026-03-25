@@ -1,0 +1,29 @@
+{
+  "name": "@fanfanv5/feishu-cli",
+  "version": "2.0.1",
+  "description": "Standalone Feishu/Lark CLI tool for Claude Code",
+  "type": "module",
+  "bin": {
+    "feishu": "bin/feishu.js"
+  },
+  "scripts": {
+    "build": "tsup src/cli/index.ts --format esm --d dist --clean",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/cli/index.ts",
+    "lint": "eslint src/",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.59.0",
+    "@sinclair/typebox": "0.34.48",
+    "commander": "^13.1.0",
+    "image-size": "^2.0.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}
