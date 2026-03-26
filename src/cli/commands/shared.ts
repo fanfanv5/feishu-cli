@@ -13,6 +13,8 @@ import { NeedAuthorizationError, UserAuthRequiredError, UserScopeInsufficientErr
 import { requestDeviceAuthorization, pollDeviceToken, resolveOAuthEndpoints } from '../../core/device-flow';
 import { setStoredToken } from '../../core/token-store';
 import { feishuFetch } from '../../core/feishu-fetch';
+import { getAppGrantedScopes } from '../../core/app-scope-checker';
+import { LarkClient } from '../../core/lark-client';
 
 /**
  * Output a result as JSON to stdout.
@@ -96,8 +98,8 @@ export function parseJsonArg(value: string): unknown {
 
 /**
  * Run OAuth device flow and return true on success.
- * Always requests broad scopes (no specific scope) so Feishu grants
- * all app-approved scopes, avoiding repeated incremental auth.
+ * Queries the app's user-level scopes from the API and passes them to the
+ * device flow so the user authorizes all required permissions at once.
  */
 async function runDeviceFlow(): Promise<boolean> {
   try {
@@ -107,12 +109,24 @@ async function runDeviceFlow(): Promise<boolean> {
     const account = accounts[0];
     if (!account.appId || !account.appSecret) return false;
 
+    // Query app's user-level scopes to pass to device flow
+    let userScopes = '';
+    try {
+      const sdk = LarkClient.fromAccount(account).sdk;
+      const scopes = await getAppGrantedScopes(sdk, account.appId, 'user');
+      if (scopes.length > 0) {
+        userScopes = scopes.join(' ');
+      }
+    } catch {
+      // If query fails, fall back to no specific scope
+    }
+
     console.error('Authorization required. Starting device flow...');
     const deviceAuth = await requestDeviceAuthorization({
       appId: account.appId,
       appSecret: account.appSecret,
       brand: account.brand,
-      // Don't pass specific scope — Feishu will grant all app-approved scopes
+      scope: userScopes || undefined,
     });
 
     console.error(`User code: ${deviceAuth.userCode}`);

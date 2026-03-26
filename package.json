@@ -1,11 +1,17 @@
 {
   "name": "@fanfanv5/feishu-cli",
-  "version": "2.0.1",
+  "version": "2.0.3",
   "description": "Standalone Feishu/Lark CLI tool for Claude Code",
   "type": "module",
   "bin": {
+    "feishu-cli": "bin/feishu.js",
     "feishu": "bin/feishu.js"
   },
+  "files": [
+    "bin/",
+    "dist/",
+    "skills/"
+  ],
   "scripts": {
     "build": "tsup src/cli/index.ts --format esm --d dist --clean",
     "typecheck": "tsc --noEmit",

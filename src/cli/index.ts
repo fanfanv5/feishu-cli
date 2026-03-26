@@ -19,7 +19,12 @@ program
   .version('1.0.0')
   .option('-a, --account <id>', 'Account ID to use', 'default')
   .hook('preAction', () => {
-    // Validate config on every command
+    // Skip config validation for skill and help commands
+    const args = process.argv.slice(2);
+    if (args[0] === 'skill' || args[0] === 'help' || args[0] === '--help' || args[0] === '-V' || args[0] === '--version') {
+      return;
+    }
+    // Validate config on every other command
     const config = loadConfig();
     const feishu = config.channels?.feishu as Record<string, unknown> | undefined;
     if (!feishu?.appId || !feishu?.appSecret) {
@@ -58,5 +63,7 @@ registerChatCommands(program);
 registerUserCommands(program);
 registerSendCommands(program);
 registerAuthCommands(program);
+import { registerSkillCommands } from './commands/skill.js';
+registerSkillCommands(program);
 
 program.parse();

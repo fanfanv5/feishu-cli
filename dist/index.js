@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
 
 // src/cli/index.ts
 import { Command } from "commander";
@@ -162,6 +168,9 @@ function getEnabledLarkAccounts(cfg) {
   }
   return results;
 }
+
+// src/core/tool-client.ts
+import * as Lark2 from "@larksuiteoapi/node-sdk";
 
 // src/core/lark-client.ts
 import * as Lark from "@larksuiteoapi/node-sdk";
@@ -599,9 +608,6 @@ var LarkClient = class _LarkClient {
     });
   }
 };
-
-// src/core/tool-client.ts
-import * as Lark2 from "@larksuiteoapi/node-sdk";
 
 // src/core/token-store.ts
 import { execFile as execFileCb } from "child_process";
@@ -1647,9 +1653,9 @@ var ToolClient = class {
    * ```
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async invokeByPath(toolAction, path4, options) {
+  async invokeByPath(toolAction, path5, options) {
     const fn = async (_sdk, _opts, uat) => {
-      return this.rawRequest(path4, {
+      return this.rawRequest(path5, {
         method: options?.method,
         body: options?.body,
         query: options?.query,
@@ -1732,10 +1738,10 @@ var ToolClient = class {
   /**
    * 发起 raw HTTP 请求到飞书 API，委托 rawLarkRequest 处理。
    */
-  async rawRequest(path4, options) {
+  async rawRequest(path5, options) {
     return rawLarkRequest({
       brand: this.account.brand,
-      path: path4,
+      path: path5,
       ...options
     });
   }
@@ -1865,12 +1871,21 @@ async function runDeviceFlow() {
     if (accounts.length === 0) return false;
     const account = accounts[0];
     if (!account.appId || !account.appSecret) return false;
+    let userScopes = "";
+    try {
+      const sdk = LarkClient.fromAccount(account).sdk;
+      const scopes = await getAppGrantedScopes(sdk, account.appId, "user");
+      if (scopes.length > 0) {
+        userScopes = scopes.join(" ");
+      }
+    } catch {
+    }
     console.error("Authorization required. Starting device flow...");
     const deviceAuth = await requestDeviceAuthorization({
       appId: account.appId,
       appSecret: account.appSecret,
-      brand: account.brand
-      // Don't pass specific scope — Feishu will grant all app-approved scopes
+      brand: account.brand,
+      scope: userScopes || void 0
     });
     console.error(`User code: ${deviceAuth.userCode}`);
     console.error(`URL: ${deviceAuth.verificationUriComplete}`);
@@ -5934,9 +5949,246 @@ function registerAuthCommands(parent) {
   });
 }
 
+// src/cli/commands/skill.ts
+import fs5 from "fs";
+import path4 from "path";
+import { fileURLToPath as fileURLToPath2 } from "url";
+function confirmPrompt(message) {
+  if (!process.stdin.isTTY) return true;
+  process.stderr.write(`${message} [y/N] `);
+  const readline = __require("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+  return new Promise((resolve) => {
+    rl.question("", (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
+    });
+  });
+}
+function getSkillSourceDir() {
+  const candidates = [
+    // npm global install: package root / skills / feishu
+    path4.resolve(fileURLToPath2(import.meta.url), "..", "..", "skills", "feishu"),
+    // tsup bundle: dist is one level up from src
+    path4.resolve(fileURLToPath2(import.meta.url), "..", "..", "..", "skills", "feishu"),
+    // development: project root / skills / feishu
+    path4.resolve(process.cwd(), "skills", "feishu")
+  ];
+  for (const dir of candidates) {
+    if (fs5.existsSync(path4.join(dir, "SKILL.md"))) return dir;
+  }
+  throw new Error(`Cannot find skill source directory. Tried:
+${candidates.join("\n")}`);
+}
+function resolveTargetDir(tool, cwd, customPath) {
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  switch (tool) {
+    case "claude":
+      return path4.join(home, ".claude", "skills", "feishu");
+    case "cursor":
+      return path4.join(cwd, ".cursor", "skills", "feishu");
+    case "windsurf":
+      return path4.join(cwd, ".windsurf", "skills", "feishu");
+    case "copilot":
+      return path4.join(cwd, ".github", "instructions");
+    case "custom":
+      if (!customPath) throw new Error("custom tool requires --target <path>");
+      return customPath;
+  }
+}
+function copyDirRecursive(src, dest) {
+  fs5.mkdirSync(dest, { recursive: true });
+  for (const entry of fs5.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path4.join(src, entry.name);
+    const destPath = path4.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs5.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+function removeDirRecursive(dir) {
+  if (!fs5.existsSync(dir)) return;
+  fs5.rmSync(dir, { recursive: true, force: true });
+}
+function buildCopilotFile(sourceDir) {
+  const skillMd = fs5.readFileSync(path4.join(sourceDir, "SKILL.md"), "utf8");
+  const body = skillMd.replace(/^---\n[\s\S]*?\n---\n/, "");
+  let content = `---
+applyTo:
+  - "**"
+description: "Feishu/Lark CLI - messaging, documents, bitable, calendar, tasks, drive, wiki, sheets, search"
+---
+
+`;
+  content += body;
+  const refsDir = path4.join(sourceDir, "references");
+  if (fs5.existsSync(refsDir)) {
+    for (const file of fs5.readdirSync(refsDir).sort()) {
+      if (!file.endsWith(".md")) continue;
+      const name = file.replace(/\.md$/, "");
+      const refContent = fs5.readFileSync(path4.join(refsDir, file), "utf8");
+      content += `
+
+## Reference: ${name}
+
+${refContent}`;
+    }
+  }
+  return content;
+}
+function registerSkillCommands(parent) {
+  const skill = parent.command("skill").description("Manage feishu skill installation for AI tools");
+  skill.command("install").description("Install feishu skill for an AI tool").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot", "claude").option("--cwd <path>", "Project root directory (for cursor/windsurf/copilot)", process.cwd()).option("--target <path>", "Custom target directory").option("--force", "Force overwrite existing installation").action(async (opts) => {
+    try {
+      const tool = opts.tool || "claude";
+      if (opts.target && opts.tool !== "custom") {
+      }
+      const finalTool = opts.target ? "custom" : tool;
+      const cwd = opts.cwd || process.cwd();
+      const sourceDir = getSkillSourceDir();
+      const targetDir = resolveTargetDir(finalTool, cwd, opts.target);
+      if (finalTool === "copilot") {
+        const filePath = path4.join(targetDir, "feishu.instructions.md");
+        if (fs5.existsSync(filePath)) {
+          if (!opts.force) {
+            outputResult({ installed: false, message: `Already installed at ${filePath} (use --force to overwrite)` });
+            return;
+          }
+          const ok = await confirmPrompt(`Found existing installation at ${filePath}, will be overwritten. Continue?`);
+          if (!ok) {
+            outputResult({ installed: false, message: "Cancelled" });
+            return;
+          }
+        }
+        fs5.mkdirSync(targetDir, { recursive: true });
+        const content = buildCopilotFile(sourceDir);
+        fs5.writeFileSync(filePath, content, "utf8");
+        outputResult({ installed: true, tool: "copilot", path: filePath });
+        return;
+      }
+      if (fs5.existsSync(targetDir)) {
+        if (!opts.force) {
+          outputResult({ installed: false, message: `Already installed at ${targetDir} (use --force to overwrite)` });
+          return;
+        }
+        const ok = await confirmPrompt(`Found existing installation at ${targetDir}, will be removed and reinstalled. Continue?`);
+        if (!ok) {
+          outputResult({ installed: false, message: "Cancelled" });
+          return;
+        }
+      }
+      if (fs5.existsSync(targetDir)) {
+        removeDirRecursive(targetDir);
+      }
+      fs5.mkdirSync(targetDir, { recursive: true });
+      const skillMd = path4.join(sourceDir, "SKILL.md");
+      if (fs5.existsSync(skillMd)) {
+        fs5.copyFileSync(skillMd, path4.join(targetDir, "SKILL.md"));
+      }
+      const refsDir = path4.join(sourceDir, "references");
+      if (fs5.existsSync(refsDir)) {
+        copyDirRecursive(refsDir, path4.join(targetDir, "references"));
+      }
+      outputResult({ installed: true, tool: finalTool, path: targetDir });
+    } catch (err) {
+      outputError(err);
+    }
+  });
+  skill.command("list").description("Check skill installation status").option("--cwd <path>", "Project root directory", process.cwd()).option("--json", "Output as JSON").action(async (opts) => {
+    try {
+      const cwd = opts.cwd || process.cwd();
+      const tools = ["claude", "cursor", "windsurf", "copilot"];
+      const results = {};
+      for (const tool of tools) {
+        const targetDir = resolveTargetDir(tool, cwd);
+        if (tool === "copilot") {
+          const filePath = path4.join(targetDir, "feishu.instructions.md");
+          results[tool] = { installed: fs5.existsSync(filePath), path: filePath };
+        } else {
+          results[tool] = {
+            installed: fs5.existsSync(path4.join(targetDir, "SKILL.md")),
+            path: targetDir
+          };
+        }
+      }
+      if (opts.json) {
+        outputResult(results);
+      } else {
+        for (const [tool, info] of Object.entries(results)) {
+          console.log(`  ${tool}: ${info.installed ? "installed" : "not installed"} (${info.path})`);
+        }
+      }
+    } catch (err) {
+      outputError(err);
+    }
+  });
+  skill.command("update").description("Update installed skill (force reinstall)").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot", "claude").option("--cwd <path>", "Project root directory", process.cwd()).option("--target <path>", "Custom target directory").action(async (opts) => {
+    try {
+      const tool = opts.tool || "claude";
+      const finalTool = opts.target ? "custom" : tool;
+      const cwd = opts.cwd || process.cwd();
+      const sourceDir = getSkillSourceDir();
+      const targetDir = resolveTargetDir(finalTool, cwd, opts.target);
+      if (finalTool === "copilot") {
+        const filePath = path4.join(targetDir, "feishu.instructions.md");
+        fs5.mkdirSync(targetDir, { recursive: true });
+        const content = buildCopilotFile(sourceDir);
+        fs5.writeFileSync(filePath, content, "utf8");
+        outputResult({ updated: true, tool: "copilot", path: filePath });
+        return;
+      }
+      removeDirRecursive(targetDir);
+      fs5.mkdirSync(targetDir, { recursive: true });
+      const skillMd = path4.join(sourceDir, "SKILL.md");
+      if (fs5.existsSync(skillMd)) {
+        fs5.copyFileSync(skillMd, path4.join(targetDir, "SKILL.md"));
+      }
+      const refsDir = path4.join(sourceDir, "references");
+      if (fs5.existsSync(refsDir)) {
+        copyDirRecursive(refsDir, path4.join(targetDir, "references"));
+      }
+      outputResult({ updated: true, tool: finalTool, path: targetDir });
+    } catch (err) {
+      outputError(err);
+    }
+  });
+  skill.command("uninstall").description("Remove installed skill").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot", "claude").option("--cwd <path>", "Project root directory", process.cwd()).option("--target <path>", "Custom target directory").action(async (opts) => {
+    try {
+      const tool = opts.tool || "claude";
+      const finalTool = opts.target ? "custom" : tool;
+      const cwd = opts.cwd || process.cwd();
+      const targetDir = resolveTargetDir(finalTool, cwd, opts.target);
+      if (finalTool === "copilot") {
+        const filePath = path4.join(targetDir, "feishu.instructions.md");
+        if (fs5.existsSync(filePath)) {
+          fs5.unlinkSync(filePath);
+          outputResult({ uninstalled: true, path: filePath });
+        } else {
+          outputResult({ uninstalled: false, message: "Not installed" });
+        }
+        return;
+      }
+      if (fs5.existsSync(targetDir)) {
+        removeDirRecursive(targetDir);
+        outputResult({ uninstalled: true, path: targetDir });
+      } else {
+        outputResult({ uninstalled: false, message: "Not installed" });
+      }
+    } catch (err) {
+      outputError(err);
+    }
+  });
+}
+
 // src/cli/index.ts
 var program = new Command();
 program.name("feishu").description("Standalone Feishu/Lark CLI tool").version("1.0.0").option("-a, --account <id>", "Account ID to use", "default").hook("preAction", () => {
+  const args = process.argv.slice(2);
+  if (args[0] === "skill" || args[0] === "help" || args[0] === "--help" || args[0] === "-V" || args[0] === "--version") {
+    return;
+  }
   const config = loadConfig();
   const feishu = config.channels?.feishu;
   if (!feishu?.appId || !feishu?.appSecret) {
@@ -5959,4 +6211,5 @@ registerChatCommands(program);
 registerUserCommands(program);
 registerSendCommands(program);
 registerAuthCommands(program);
+registerSkillCommands(program);
 program.parse();
