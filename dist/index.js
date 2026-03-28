@@ -1,13 +1,10 @@
 #!/usr/bin/env node
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
 
 // src/cli/index.ts
 import { Command } from "commander";
+import { readFileSync as readFileSync3 } from "fs";
+import { fileURLToPath as fileURLToPath3 } from "url";
+import { dirname as dirname4, join as join4 } from "path";
 
 // src/cli/config.ts
 import { readFileSync, existsSync } from "fs";
@@ -4166,18 +4163,18 @@ function registerImCommands(parent) {
       const mimeExt = mimeType ? MIME_TO_EXT[mimeType] : void 0;
       let outputPath = opts.output_path;
       if (!outputPath) {
-        const { join: join4 } = await import("path");
+        const { join: join5 } = await import("path");
         const os = await import("os");
         const { tmpdir } = await import("os");
         const tmpDir = os.tmpdir();
         const ext = mimeExt || `.${opts.type}`;
         const timestamp = Date.now();
         const random = Math.random().toString(36).substring(2, 8);
-        outputPath = join4(tmpDir, `feishu-${opts.type}-${timestamp}-${random}${ext}`);
+        outputPath = join5(tmpDir, `feishu-${opts.type}-${timestamp}-${random}${ext}`);
       }
       const { mkdir: mkdir4, writeFile: writeFile4 } = await import("fs/promises");
-      const { dirname: dirname4 } = await import("path");
-      await mkdir4(dirname4(outputPath), { recursive: true });
+      const { dirname: dirname5 } = await import("path");
+      await mkdir4(dirname5(outputPath), { recursive: true });
       await writeFile4(outputPath, buffer);
       outputResult({
         saved_path: outputPath,
@@ -5953,18 +5950,7 @@ function registerAuthCommands(parent) {
 import fs5 from "fs";
 import path4 from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
-function confirmPrompt(message) {
-  if (!process.stdin.isTTY) return true;
-  process.stderr.write(`${message} [y/N] `);
-  const readline = __require("readline");
-  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-  return new Promise((resolve) => {
-    rl.question("", (answer) => {
-      rl.close();
-      resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
-    });
-  });
-}
+import { createInterface } from "readline";
 function getSkillSourceDir() {
   const candidates = [
     // npm global install: package root / skills / feishu
@@ -6051,16 +6037,9 @@ function registerSkillCommands(parent) {
       const targetDir = resolveTargetDir(finalTool, cwd, opts.target);
       if (finalTool === "copilot") {
         const filePath = path4.join(targetDir, "feishu.instructions.md");
-        if (fs5.existsSync(filePath)) {
-          if (!opts.force) {
-            outputResult({ installed: false, message: `Already installed at ${filePath} (use --force to overwrite)` });
-            return;
-          }
-          const ok = await confirmPrompt(`Found existing installation at ${filePath}, will be overwritten. Continue?`);
-          if (!ok) {
-            outputResult({ installed: false, message: "Cancelled" });
-            return;
-          }
+        if (fs5.existsSync(filePath) && !opts.force) {
+          outputResult({ installed: false, message: `Already installed at ${filePath} (use --force to overwrite)` });
+          return;
         }
         fs5.mkdirSync(targetDir, { recursive: true });
         const content = buildCopilotFile(sourceDir);
@@ -6068,16 +6047,9 @@ function registerSkillCommands(parent) {
         outputResult({ installed: true, tool: "copilot", path: filePath });
         return;
       }
-      if (fs5.existsSync(targetDir)) {
-        if (!opts.force) {
-          outputResult({ installed: false, message: `Already installed at ${targetDir} (use --force to overwrite)` });
-          return;
-        }
-        const ok = await confirmPrompt(`Found existing installation at ${targetDir}, will be removed and reinstalled. Continue?`);
-        if (!ok) {
-          outputResult({ installed: false, message: "Cancelled" });
-          return;
-        }
+      if (fs5.existsSync(targetDir) && !opts.force) {
+        outputResult({ installed: false, message: `Already installed at ${targetDir} (use --force to overwrite)` });
+        return;
       }
       if (fs5.existsSync(targetDir)) {
         removeDirRecursive(targetDir);
@@ -6183,8 +6155,19 @@ function registerSkillCommands(parent) {
 }
 
 // src/cli/index.ts
+function loadVersion() {
+  const dir = dirname4(fileURLToPath3(import.meta.url));
+  for (const rel of ["../package.json", "../../package.json"]) {
+    try {
+      return JSON.parse(readFileSync3(join4(dir, rel), "utf8")).version;
+    } catch {
+    }
+  }
+  return "0.0.0";
+}
+var version = loadVersion();
 var program = new Command();
-program.name("feishu").description("Standalone Feishu/Lark CLI tool").version("1.0.0").option("-a, --account <id>", "Account ID to use", "default").hook("preAction", () => {
+program.name("feishu").description("Standalone Feishu/Lark CLI tool").version(version).option("-a, --account <id>", "Account ID to use", "default").hook("preAction", () => {
   const args = process.argv.slice(2);
   if (args[0] === "skill" || args[0] === "help" || args[0] === "--help" || args[0] === "-V" || args[0] === "--version") {
     return;

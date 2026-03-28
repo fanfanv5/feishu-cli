@@ -9,11 +9,19 @@
  */
 
 import { Command } from 'commander';
-import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { loadConfig } from './config.js';
 
-const require = createRequire(import.meta.url);
-const { version } = require('../../package.json');
+function loadVersion(): string {
+  const dir = dirname(fileURLToPath(import.meta.url));
+  for (const rel of ['../package.json', '../../package.json']) {
+    try { return JSON.parse(readFileSync(join(dir, rel), 'utf8')).version; } catch {}
+  }
+  return '0.0.0';
+}
+const version = loadVersion();
 
 const program = new Command();
 

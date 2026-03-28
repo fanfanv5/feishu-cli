@@ -4,21 +4,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createInterface } from 'node:readline';
 import type { Command } from 'commander';
 import { outputResult, outputError } from './shared.js';
 
 type AiTool = 'claude' | 'cursor' | 'windsurf' | 'copilot' | 'custom';
 
 /** Prompt user for confirmation (yes/no) on stderr. Returns true if confirmed. */
-function confirmPrompt(message: string): boolean {
-  // If stdin is not a TTY (piped/CI), default to yes
-  if (!process.stdin.isTTY) return true;
-  process.stderr.write(`${message} [y/N] `);
-  // Synchronous read is not available in Node, but for CLI we can use createInterface
-  const readline = require('readline');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+function confirmPrompt(message: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return Promise.resolve(true);
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
   return new Promise<boolean>((resolve) => {
-    rl.question('', (answer) => {
+    rl.question(`${message} [y/N] `, (answer) => {
       rl.close();
       resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
     });
@@ -123,16 +120,9 @@ export function registerSkillCommands(parent: Command): void {
         // Copilot special handling
         if (finalTool === 'copilot') {
           const filePath = path.join(targetDir, 'feishu.instructions.md');
-          if (fs.existsSync(filePath)) {
-            if (!opts.force) {
-              outputResult({ installed: false, message: `Already installed at ${filePath} (use --force to overwrite)` });
-              return;
-            }
-            const ok = await confirmPrompt(`Found existing installation at ${filePath}, will be overwritten. Continue?`);
-            if (!ok) {
-              outputResult({ installed: false, message: 'Cancelled' });
-              return;
-            }
+          if (fs.existsSync(filePath) && !opts.force) {
+            outputResult({ installed: false, message: `Already installed at ${filePath} (use --force to overwrite)` });
+            return;
           }
           fs.mkdirSync(targetDir, { recursive: true });
           const content = buildCopilotFile(sourceDir);
@@ -142,16 +132,9 @@ export function registerSkillCommands(parent: Command): void {
         }
 
         // Standard install
-        if (fs.existsSync(targetDir)) {
-          if (!opts.force) {
-            outputResult({ installed: false, message: `Already installed at ${targetDir} (use --force to overwrite)` });
-            return;
-          }
-          const ok = await confirmPrompt(`Found existing installation at ${targetDir}, will be removed and reinstalled. Continue?`);
-          if (!ok) {
-            outputResult({ installed: false, message: 'Cancelled' });
-            return;
-          }
+        if (fs.existsSync(targetDir) && !opts.force) {
+          outputResult({ installed: false, message: `Already installed at ${targetDir} (use --force to overwrite)` });
+          return;
         }
 
         // Clean old version residual files before installing
