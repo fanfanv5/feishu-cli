@@ -7,14 +7,13 @@ import type { ClawdbotConfig } from '../../shim/plugin-sdk';
 import { loadConfig } from '../config';
 import { getEnabledLarkAccounts, getLarkAccount } from '../../core/accounts';
 import { LarkClient } from '../../core/lark-client';
-import { createToolClient } from '../../core/tool-client';
-import { ToolClient } from '../../core/tool-client';
+import { createToolClient, ToolClient } from '../../core/tool-client';
 import { NeedAuthorizationError, UserAuthRequiredError, UserScopeInsufficientError } from '../../core/auth-errors';
-import { requestDeviceAuthorization, pollDeviceToken, resolveOAuthEndpoints } from '../../core/device-flow';
+import { requestDeviceAuthorization, pollDeviceToken } from '../../core/device-flow';
 import { setStoredToken } from '../../core/token-store';
 import { feishuFetch } from '../../core/feishu-fetch';
 import { getAppGrantedScopes } from '../../core/app-scope-checker';
-import { LarkClient } from '../../core/lark-client';
+import { openPlatformDomain } from '../../core/domains';
 
 /**
  * Output a result as JSON to stdout.
@@ -150,8 +149,8 @@ async function runDeviceFlow(): Promise<boolean> {
     if (tokenResult.ok) {
       // Store token: need userOpenId from authen API
       try {
-        const endpoints = resolveOAuthEndpoints(account.brand);
-        const meResp = await feishuFetch('https://open.feishu.cn/open-apis/authen/v1/user_info', {
+        const baseUrl = openPlatformDomain(account.brand);
+        const meResp = await feishuFetch(`${baseUrl}/open-apis/authen/v1/user_info`, {
           headers: { Authorization: `Bearer ${tokenResult.token.accessToken}` },
         });
         const meData = (await meResp.json()) as Record<string, unknown>;

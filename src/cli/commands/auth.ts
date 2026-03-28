@@ -5,7 +5,9 @@ import type { Command } from 'commander';
 import { outputResult, outputError, getConfig } from './shared';
 import { getEnabledLarkAccounts } from '../../core/accounts';
 import { requestDeviceAuthorization, pollDeviceToken } from '../../core/device-flow';
-import { getStoredToken } from '../../core/token-store';
+import { setStoredToken, findTokenForApp, tokenStatus } from '../../core/token-store';
+import { feishuFetch } from '../../core/feishu-fetch';
+import { openPlatformDomain } from '../../core/domains';
 
 export function registerAuthCommands(parent: Command): void {
   const auth = parent.command('auth').description('Authentication management');
@@ -57,8 +59,37 @@ export function registerAuthCommands(parent: Command): void {
         });
 
         if (tokenResult.ok) {
+          let userOpenId: string | undefined;
+          try {
+            const baseUrl = openPlatformDomain(account.brand);
+            const meResp = await feishuFetch(`${baseUrl}/open-apis/authen/v1/user_info`, {
+              headers: { Authorization: `Bearer ${tokenResult.token.accessToken}` },
+            });
+            const meData = (await meResp.json()) as Record<string, unknown>;
+            if (meData.code === 0 && meData.data) {
+              userOpenId = (meData.data as Record<string, unknown>).open_id as string;
+            }
+          } catch (infoErr) {
+            console.error(`Warning: failed to fetch user info: ${infoErr instanceof Error ? infoErr.message : infoErr}`);
+          }
+
+          if (userOpenId) {
+            await setStoredToken({
+              userOpenId,
+              appId: account.appId,
+              accessToken: tokenResult.token.accessToken,
+              refreshToken: tokenResult.token.refreshToken,
+              expiresAt: Date.now() + tokenResult.token.expiresIn * 1000,
+              refreshExpiresAt: Date.now() + tokenResult.token.refreshExpiresIn * 1000,
+              scope: tokenResult.token.scope,
+              grantedAt: Date.now(),
+            });
+            console.error(`Token stored for user ${userOpenId}`);
+          }
+
           outputResult({
             success: true,
+            user_open_id: userOpenId,
             scope: tokenResult.token.scope,
             expires_in: tokenResult.token.expiresIn,
             refresh_expires_in: tokenResult.token.refreshExpiresIn,
@@ -92,14 +123,28 @@ export function registerAuthCommands(parent: Command): void {
             });
             continue;
           }
-          // Try to find any stored token for this account
-          const stored = await getStoredToken(account.appId, '');
-          // Note: getStoredToken needs userOpenId which we don't have in CLI context.
-          // For status check, we just report account config.
+
+          const stored = await findTokenForApp(account.appId);
+          if (!stored) {
+            results.push({
+              account_id: account.accountId,
+              brand: account.brand,
+              authenticated: false,
+              token_status: 'none',
+            });
+            continue;
+          }
+
+          const status = tokenStatus(stored);
           results.push({
             account_id: account.accountId,
-            configured: !!(account.appId && account.appSecret),
             brand: account.brand,
+            authenticated: status !== 'expired',
+            token_status: status,
+            user_open_id: stored.userOpenId,
+            scope: stored.scope,
+            access_token_expires_at: new Date(stored.expiresAt).toISOString(),
+            refresh_token_expires_at: new Date(stored.refreshExpiresAt).toISOString(),
           });
         }
         outputResult(results);

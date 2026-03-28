@@ -166,9 +166,6 @@ function getEnabledLarkAccounts(cfg) {
   return results;
 }
 
-// src/core/tool-client.ts
-import * as Lark2 from "@larksuiteoapi/node-sdk";
-
 // src/core/lark-client.ts
 import * as Lark from "@larksuiteoapi/node-sdk";
 
@@ -606,6 +603,9 @@ var LarkClient = class _LarkClient {
   }
 };
 
+// src/core/tool-client.ts
+import * as Lark2 from "@larksuiteoapi/node-sdk";
+
 // src/core/token-store.ts
 import { execFile as execFileCb } from "child_process";
 import { promisify } from "util";
@@ -797,11 +797,36 @@ async function setStoredToken(token) {
   const key = accountKey(token.appId, token.userOpenId);
   const payload = JSON.stringify(token);
   await backend.set(KEYCHAIN_SERVICE, key, payload);
+  await saveUserMapping(token.appId, token.userOpenId);
   log3.info(`saved UAT for ${token.userOpenId} (at:${maskToken(token.accessToken)})`);
 }
 async function removeStoredToken(appId, userOpenId) {
   await backend.remove(KEYCHAIN_SERVICE, accountKey(appId, userOpenId));
+  await removeUserMapping(appId);
   log3.info(`removed UAT for ${userOpenId}`);
+}
+function getMetadataDir() {
+  if (process.platform === "win32") return WIN32_UAT_DIR;
+  return LINUX_UAT_DIR;
+}
+async function saveUserMapping(appId, userOpenId) {
+  const dir = getMetadataDir();
+  await mkdir(dir, { recursive: true });
+  await writeFile(join3(dir, `${appId}.user`), userOpenId, "utf8");
+}
+async function removeUserMapping(appId) {
+  try {
+    await unlink(join3(getMetadataDir(), `${appId}.user`));
+  } catch {
+  }
+}
+async function findTokenForApp(appId) {
+  try {
+    const userOpenId = (await readFile(join3(getMetadataDir(), `${appId}.user`), "utf8")).trim();
+    if (userOpenId) return getStoredToken(appId, userOpenId);
+  } catch {
+  }
+  return null;
 }
 function tokenStatus(token) {
   const now = Date.now();
@@ -1818,6 +1843,14 @@ function createToolClient(config, accountIndex = 0) {
   });
 }
 
+// src/core/domains.ts
+function openPlatformDomain(brand) {
+  return brand === "lark" ? "https://open.larksuite.com" : "https://open.feishu.cn";
+}
+function mcpDomain(brand) {
+  return brand === "lark" ? "https://mcp.larksuite.com" : "https://mcp.feishu.cn";
+}
+
 // src/cli/commands/shared.ts
 function outputResult(data) {
   console.log(JSON.stringify(data, null, 2));
@@ -1900,8 +1933,8 @@ async function runDeviceFlow() {
     });
     if (tokenResult.ok) {
       try {
-        const endpoints = resolveOAuthEndpoints(account.brand);
-        const meResp = await feishuFetch("https://open.feishu.cn/open-apis/authen/v1/user_info", {
+        const baseUrl = openPlatformDomain(account.brand);
+        const meResp = await feishuFetch(`${baseUrl}/open-apis/authen/v1/user_info`, {
           headers: { Authorization: `Bearer ${tokenResult.token.accessToken}` }
         });
         const meData = await meResp.json();
@@ -4881,11 +4914,6 @@ function registerWikiCommands(parent) {
 // src/cli/commands/doc.ts
 import fs3 from "fs";
 
-// src/core/domains.ts
-function mcpDomain(brand) {
-  return brand === "lark" ? "https://mcp.larksuite.com" : "https://mcp.feishu.cn";
-}
-
 // src/core/mcp-client.ts
 import fs2 from "fs";
 import path2 from "path";
@@ -5900,8 +5928,35 @@ function registerAuthCommands(parent) {
         expiresIn: deviceAuth.expiresIn
       });
       if (tokenResult.ok) {
+        let userOpenId;
+        try {
+          const baseUrl = openPlatformDomain(account.brand);
+          const meResp = await feishuFetch(`${baseUrl}/open-apis/authen/v1/user_info`, {
+            headers: { Authorization: `Bearer ${tokenResult.token.accessToken}` }
+          });
+          const meData = await meResp.json();
+          if (meData.code === 0 && meData.data) {
+            userOpenId = meData.data.open_id;
+          }
+        } catch (infoErr) {
+          console.error(`Warning: failed to fetch user info: ${infoErr instanceof Error ? infoErr.message : infoErr}`);
+        }
+        if (userOpenId) {
+          await setStoredToken({
+            userOpenId,
+            appId: account.appId,
+            accessToken: tokenResult.token.accessToken,
+            refreshToken: tokenResult.token.refreshToken,
+            expiresAt: Date.now() + tokenResult.token.expiresIn * 1e3,
+            refreshExpiresAt: Date.now() + tokenResult.token.refreshExpiresIn * 1e3,
+            scope: tokenResult.token.scope,
+            grantedAt: Date.now()
+          });
+          console.error(`Token stored for user ${userOpenId}`);
+        }
         outputResult({
           success: true,
+          user_open_id: userOpenId,
           scope: tokenResult.token.scope,
           expires_in: tokenResult.token.expiresIn,
           refresh_expires_in: tokenResult.token.refreshExpiresIn
@@ -5932,11 +5987,26 @@ function registerAuthCommands(parent) {
           });
           continue;
         }
-        const stored = await getStoredToken(account.appId, "");
+        const stored = await findTokenForApp(account.appId);
+        if (!stored) {
+          results.push({
+            account_id: account.accountId,
+            brand: account.brand,
+            authenticated: false,
+            token_status: "none"
+          });
+          continue;
+        }
+        const status = tokenStatus(stored);
         results.push({
           account_id: account.accountId,
-          configured: !!(account.appId && account.appSecret),
-          brand: account.brand
+          brand: account.brand,
+          authenticated: status !== "expired",
+          token_status: status,
+          user_open_id: stored.userOpenId,
+          scope: stored.scope,
+          access_token_expires_at: new Date(stored.expiresAt).toISOString(),
+          refresh_token_expires_at: new Date(stored.refreshExpiresAt).toISOString()
         });
       }
       outputResult(results);

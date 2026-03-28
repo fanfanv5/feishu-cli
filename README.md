@@ -1,11 +1,11 @@
-# feishu-cli 安装使用手册 v2.0.8
+# feishu-cli 安装使用手册 v2.0.10
 
 feishu-cli 安装使用手册
 
 本 CLI 由 openclaw-lark 官方插件源码改造而来，不局限于 openclaw，适配大多数 AI 工具场景使用
 
 包名：**@fanfanv5/feishu-cli**
-版本：**2.0.8**
+版本：**2.0.10**
 命令：**feishu**（别名 `feishu-cli`）
 适用平台：**Windows / macOS / Linux**
 
@@ -276,7 +276,7 @@ feishu-cli --help  # 别名
 
 ```bash
 feishu -V
-# 输出: 2.0.8
+# 输出: 2.0.10
 ```
 
 ### 2.4 安装 AI Skill

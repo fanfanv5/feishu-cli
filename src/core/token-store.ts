@@ -334,6 +334,7 @@ export async function setStoredToken(token: StoredUAToken): Promise<void> {
   const key = accountKey(token.appId, token.userOpenId);
   const payload = JSON.stringify(token);
   await backend.set(KEYCHAIN_SERVICE, key, payload);
+  await saveUserMapping(token.appId, token.userOpenId);
   log.info(`saved UAT for ${token.userOpenId} (at:${maskToken(token.accessToken)})`);
 }
 
@@ -342,7 +343,41 @@ export async function setStoredToken(token: StoredUAToken): Promise<void> {
  */
 export async function removeStoredToken(appId: string, userOpenId: string): Promise<void> {
   await backend.remove(KEYCHAIN_SERVICE, accountKey(appId, userOpenId));
+  await removeUserMapping(appId);
   log.info(`removed UAT for ${userOpenId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Metadata – appId → userOpenId mapping for CLI lookups
+// ---------------------------------------------------------------------------
+
+function getMetadataDir(): string {
+  if (process.platform === 'win32') return WIN32_UAT_DIR;
+  return LINUX_UAT_DIR;
+}
+
+async function saveUserMapping(appId: string, userOpenId: string): Promise<void> {
+  const dir = getMetadataDir();
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, `${appId}.user`), userOpenId, 'utf8');
+}
+
+async function removeUserMapping(appId: string): Promise<void> {
+  try {
+    await unlink(join(getMetadataDir(), `${appId}.user`));
+  } catch { /* absent – fine */ }
+}
+
+/**
+ * Find a stored token for an appId without knowing the userOpenId.
+ * Uses a metadata file written alongside the encrypted token.
+ */
+export async function findTokenForApp(appId: string): Promise<StoredUAToken | null> {
+  try {
+    const userOpenId = (await readFile(join(getMetadataDir(), `${appId}.user`), 'utf8')).trim();
+    if (userOpenId) return getStoredToken(appId, userOpenId);
+  } catch { /* no mapping – no token */ }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
