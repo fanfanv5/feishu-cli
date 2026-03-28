@@ -5969,6 +5969,8 @@ ${candidates.join("\n")}`);
 function resolveTargetDir(tool, cwd, customPath) {
   const home = process.env.HOME || process.env.USERPROFILE || "";
   switch (tool) {
+    case "default":
+      return path4.join(cwd, "skills", "feishu");
     case "claude":
       return path4.join(home, ".claude", "skills", "feishu");
     case "cursor":
@@ -6026,9 +6028,9 @@ ${refContent}`;
 }
 function registerSkillCommands(parent) {
   const skill = parent.command("skill").description("Manage feishu skill installation for AI tools");
-  skill.command("install").description("Install feishu skill for an AI tool").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot", "claude").option("--cwd <path>", "Project root directory (for cursor/windsurf/copilot)", process.cwd()).option("--target <path>", "Custom target directory").option("--force", "Force overwrite existing installation").action(async (opts) => {
+  skill.command("install").description("Install feishu skill for an AI tool").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot (default: install to <cwd>/skills/feishu/)").option("--cwd <path>", "Project root directory", process.cwd()).option("--target <path>", "Custom target directory").option("--force", "Force overwrite existing installation").action(async (opts) => {
     try {
-      const tool = opts.tool || "claude";
+      const tool = opts.tool || "default";
       if (opts.target && opts.tool !== "custom") {
       }
       const finalTool = opts.target ? "custom" : tool;
@@ -6045,6 +6047,10 @@ function registerSkillCommands(parent) {
         const content = buildCopilotFile(sourceDir);
         fs5.writeFileSync(filePath, content, "utf8");
         outputResult({ installed: true, tool: "copilot", path: filePath });
+        return;
+      }
+      if (path4.resolve(sourceDir) === path4.resolve(targetDir)) {
+        outputResult({ installed: true, tool: finalTool, path: targetDir, message: "Source and target are the same directory, skipped copy" });
         return;
       }
       if (fs5.existsSync(targetDir) && !opts.force) {
@@ -6071,7 +6077,7 @@ function registerSkillCommands(parent) {
   skill.command("list").description("Check skill installation status").option("--cwd <path>", "Project root directory", process.cwd()).option("--json", "Output as JSON").action(async (opts) => {
     try {
       const cwd = opts.cwd || process.cwd();
-      const tools = ["claude", "cursor", "windsurf", "copilot"];
+      const tools = ["default", "claude", "cursor", "windsurf", "copilot"];
       const results = {};
       for (const tool of tools) {
         const targetDir = resolveTargetDir(tool, cwd);
@@ -6096,9 +6102,9 @@ function registerSkillCommands(parent) {
       outputError(err);
     }
   });
-  skill.command("update").description("Update installed skill (force reinstall)").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot", "claude").option("--cwd <path>", "Project root directory", process.cwd()).option("--target <path>", "Custom target directory").action(async (opts) => {
+  skill.command("update").description("Update installed skill (force reinstall)").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot (default: <cwd>/skills/feishu/)").option("--cwd <path>", "Project root directory", process.cwd()).option("--target <path>", "Custom target directory").action(async (opts) => {
     try {
-      const tool = opts.tool || "claude";
+      const tool = opts.tool || "default";
       const finalTool = opts.target ? "custom" : tool;
       const cwd = opts.cwd || process.cwd();
       const sourceDir = getSkillSourceDir();
@@ -6109,6 +6115,10 @@ function registerSkillCommands(parent) {
         const content = buildCopilotFile(sourceDir);
         fs5.writeFileSync(filePath, content, "utf8");
         outputResult({ updated: true, tool: "copilot", path: filePath });
+        return;
+      }
+      if (path4.resolve(sourceDir) === path4.resolve(targetDir)) {
+        outputResult({ updated: true, tool: finalTool, path: targetDir, message: "Source and target are the same directory, skipped copy" });
         return;
       }
       removeDirRecursive(targetDir);
@@ -6126,9 +6136,9 @@ function registerSkillCommands(parent) {
       outputError(err);
     }
   });
-  skill.command("uninstall").description("Remove installed skill").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot", "claude").option("--cwd <path>", "Project root directory", process.cwd()).option("--target <path>", "Custom target directory").action(async (opts) => {
+  skill.command("uninstall").description("Remove installed skill").option("--tool <tool>", "AI tool: claude|cursor|windsurf|copilot (default: <cwd>/skills/feishu/)").option("--cwd <path>", "Project root directory", process.cwd()).option("--target <path>", "Custom target directory").action(async (opts) => {
     try {
-      const tool = opts.tool || "claude";
+      const tool = opts.tool || "default";
       const finalTool = opts.target ? "custom" : tool;
       const cwd = opts.cwd || process.cwd();
       const targetDir = resolveTargetDir(finalTool, cwd, opts.target);

@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline';
 import type { Command } from 'commander';
 import { outputResult, outputError } from './shared.js';
 
-type AiTool = 'claude' | 'cursor' | 'windsurf' | 'copilot' | 'custom';
+type AiTool = 'default' | 'claude' | 'cursor' | 'windsurf' | 'copilot' | 'custom';
 
 /** Prompt user for confirmation (yes/no) on stderr. Returns true if confirmed. */
 function confirmPrompt(message: string): Promise<boolean> {
@@ -42,6 +42,8 @@ function getSkillSourceDir(): string {
 function resolveTargetDir(tool: AiTool, cwd: string, customPath?: string): string {
   const home = process.env.HOME || process.env.USERPROFILE || '';
   switch (tool) {
+    case 'default':
+      return path.join(cwd, 'skills', 'feishu');
     case 'claude':
       return path.join(home, '.claude', 'skills', 'feishu');
     case 'cursor':
@@ -102,13 +104,13 @@ export function registerSkillCommands(parent: Command): void {
   skill
     .command('install')
     .description('Install feishu skill for an AI tool')
-    .option('--tool <tool>', 'AI tool: claude|cursor|windsurf|copilot', 'claude')
-    .option('--cwd <path>', 'Project root directory (for cursor/windsurf/copilot)', process.cwd())
+    .option('--tool <tool>', 'AI tool: claude|cursor|windsurf|copilot (default: install to <cwd>/skills/feishu/)')
+    .option('--cwd <path>', 'Project root directory', process.cwd())
     .option('--target <path>', 'Custom target directory')
     .option('--force', 'Force overwrite existing installation')
     .action(async (opts) => {
       try {
-        const tool = (opts.tool || 'claude') as AiTool;
+        const tool = (opts.tool || 'default') as AiTool;
         if (opts.target && opts.tool !== 'custom') {
           // If --target is provided, auto-switch to custom
         }
@@ -128,6 +130,12 @@ export function registerSkillCommands(parent: Command): void {
           const content = buildCopilotFile(sourceDir);
           fs.writeFileSync(filePath, content, 'utf8');
           outputResult({ installed: true, tool: 'copilot', path: filePath });
+          return;
+        }
+
+        // Prevent deleting source when source == target
+        if (path.resolve(sourceDir) === path.resolve(targetDir)) {
+          outputResult({ installed: true, tool: finalTool, path: targetDir, message: 'Source and target are the same directory, skipped copy' });
           return;
         }
 
@@ -169,7 +177,7 @@ export function registerSkillCommands(parent: Command): void {
     .action(async (opts) => {
       try {
         const cwd = opts.cwd || process.cwd();
-        const tools: AiTool[] = ['claude', 'cursor', 'windsurf', 'copilot'];
+        const tools: AiTool[] = ['default', 'claude', 'cursor', 'windsurf', 'copilot'];
         const results: Record<string, { installed: boolean; path: string }> = {};
 
         for (const tool of tools) {
@@ -201,12 +209,12 @@ export function registerSkillCommands(parent: Command): void {
   skill
     .command('update')
     .description('Update installed skill (force reinstall)')
-    .option('--tool <tool>', 'AI tool: claude|cursor|windsurf|copilot', 'claude')
+    .option('--tool <tool>', 'AI tool: claude|cursor|windsurf|copilot (default: <cwd>/skills/feishu/)')
     .option('--cwd <path>', 'Project root directory', process.cwd())
     .option('--target <path>', 'Custom target directory')
     .action(async (opts) => {
       try {
-        const tool = (opts.tool || 'claude') as AiTool;
+        const tool = (opts.tool || 'default') as AiTool;
         const finalTool = opts.target ? 'custom' as AiTool : tool;
         const cwd = opts.cwd || process.cwd();
         const sourceDir = getSkillSourceDir();
@@ -218,6 +226,11 @@ export function registerSkillCommands(parent: Command): void {
           const content = buildCopilotFile(sourceDir);
           fs.writeFileSync(filePath, content, 'utf8');
           outputResult({ updated: true, tool: 'copilot', path: filePath });
+          return;
+        }
+
+        if (path.resolve(sourceDir) === path.resolve(targetDir)) {
+          outputResult({ updated: true, tool: finalTool, path: targetDir, message: 'Source and target are the same directory, skipped copy' });
           return;
         }
 
@@ -242,12 +255,12 @@ export function registerSkillCommands(parent: Command): void {
   skill
     .command('uninstall')
     .description('Remove installed skill')
-    .option('--tool <tool>', 'AI tool: claude|cursor|windsurf|copilot', 'claude')
+    .option('--tool <tool>', 'AI tool: claude|cursor|windsurf|copilot (default: <cwd>/skills/feishu/)')
     .option('--cwd <path>', 'Project root directory', process.cwd())
     .option('--target <path>', 'Custom target directory')
     .action(async (opts) => {
       try {
-        const tool = (opts.tool || 'claude') as AiTool;
+        const tool = (opts.tool || 'default') as AiTool;
         const finalTool = opts.target ? 'custom' as AiTool : tool;
         const cwd = opts.cwd || process.cwd();
         const targetDir = resolveTargetDir(finalTool, cwd, opts.target);

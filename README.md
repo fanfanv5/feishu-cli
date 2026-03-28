@@ -279,6 +279,80 @@ feishu -V
 # 输出: 2.0.8
 ```
 
+### 2.4 安装 AI Skill
+
+@fanfanv5/feishu-cli 内置了 AI Skill 文件，安装后 AI 工具可直接用自然语言操作飞书。
+
+```bash
+# 默认安装到当前目录 skills/feishu/
+feishu skill install
+feishu skill install --force                  # 强制覆盖已有安装
+
+# 安装到指定 AI 工具
+feishu skill install --tool claude            # Claude Code
+feishu skill install --tool cursor            # Cursor（当前项目）
+feishu skill install --tool windsurf          # Windsurf（当前项目）
+feishu skill install --tool copilot           # GitHub Copilot（合并为单文件）
+
+# 安装到自定义目录
+feishu skill install --target /path/to/custom/dir
+```
+
+各工具安装位置：
+
+| 命令 | 安装位置 |
+|------|---------|
+| `feishu skill install` | `<cwd>/skills/feishu/` |
+| `--tool claude` | `~/.claude/skills/feishu/` |
+| `--tool cursor` | `<cwd>/.cursor/skills/feishu/` |
+| `--tool windsurf` | `<cwd>/.windsurf/skills/feishu/` |
+| `--tool copilot` | `<cwd>/.github/instructions/feishu.instructions.md` |
+
+安装内容：
+```
+skills/feishu/
+├── SKILL.md              # Skill 定义（命令参考 + 导航表）
+└── references/           # 按需加载的领域知识
+    ├── bitable.md        ← 多维表格字段类型、筛选语法
+    ├── calendar.md       ← 日历忙闲、循环事件、参会人
+    ├── doc-create.md     ← 飞书 Markdown 语法
+    ├── doc-fetch.md      ← 文档内容获取
+    ├── doc-update.md     ← 7 种更新模式
+    ├── im-read.md        ← 消息搜索、资源下载
+    ├── task.md           ← 任务 CRUD、清单管理
+    ├── troubleshoot.md   ← 错误排查
+    ├── channel-rules.md  ← 消息格式规范
+    ├── field-properties.md ← 27 种字段类型配置
+    ├── record-values.md  ← 记录值数据格式
+    ├── examples.md       ← 使用场景示例
+    └── markdown-syntax.md ← 飞书 Markdown 差异
+```
+
+### 2.5 Skill 管理
+
+```bash
+# 检查安装状态
+feishu skill list
+
+# 更新（强制重新安装）
+feishu skill update --tool claude
+
+# 卸载
+feishu skill uninstall --tool claude
+```
+
+> 安装时如已存在会提示使用 `--force`。使用 `--force` 会直接覆盖安装，无需确认。
+
+### 2.6 Skill 使用方式
+
+安装后在 AI 工具中直接用自然语言操作飞书：
+- "帮我查一下明天的日程"
+- "把这个多维表格的记录导出来"
+- "在知识库创建一个新文档，标题是xxx"
+- "搜索包含'项目计划'的文档"
+
+Skill 会自动识别意图，调用 feishu 命令执行操作。
+
 ## 三、配置与授权
 
 ### 3.1 创建配置文件
@@ -547,130 +621,7 @@ feishu auth device-flow
 feishu auth status
 ```
 
-## 五、Skill 安装与配置
-
-@fanfanv5/feishu-cli npm 包内置了 Claude Code Skill 文件，安装后可一键部署到各种 AI 工具。
-
-### 5.1 安装到 Claude Code
-
-```bash
-feishu skill install
-# 或指定工具
-feishu skill install --tool claude --force
-```
-
-安装位置：`~/.claude/skills/feishu/`
-
-安装内容：
-```
-~/.claude/skills/feishu/
-├── SKILL.md              # Skill 定义（命令参考 + 导航表）
-└── references/           # 按需加载的领域知识
-    ├── bitable.md
-    ├── calendar.md
-    ├── channel-rules.md
-    ├── doc-create.md
-    ├── doc-fetch.md
-    ├── doc-update.md
-    ├── examples.md
-    ├── field-properties.md
-    ├── im-read.md
-    ├── markdown-syntax.md
-    ├── record-values.md
-    ├── task.md
-    └── troubleshoot.md
-```
-
-### 5.2 安装到 Cursor
-
-```bash
-feishu skill install --tool cursor --cwd /path/to/project
-```
-
-安装位置：`/path/to/project/.cursor/skills/feishu/`
-
-### 5.3 安装到 Windsurf
-
-```bash
-feishu skill install --tool windsurf --cwd /path/to/project
-```
-
-安装位置：`/path/to/project/.windsurf/skills/feishu/`
-
-### 5.4 安装到 GitHub Copilot
-
-```bash
-feishu skill install --tool copilot --cwd /path/to/project
-```
-
-安装位置：`/path/to/project/.github/instructions/feishu.instructions.md`
-
-Copilot 安装会将所有内容合并为单个文件。
-
-### 5.5 安装到自定义目录
-
-```bash
-feishu skill install --target /path/to/custom/dir
-```
-
-### 5.6 检查安装状态
-
-```bash
-feishu skill list
-```
-
-输出示例：
-```
-  claude:   installed (C:\Users\xxx\.claude\skills\feishu)
-  cursor:  not installed (G:\project\.cursor\skills\feishu)
-  windsurf: not installed (G:\project\.windsurf\skills\feishu)
-  copilot: not installed (G:\project\.github\instructions)
-```
-
-### 5.7 更新与卸载
-
-```bash
-# 更新（强制重新安装）
-feishu skill update --tool claude
-
-# 卸载
-feishu skill uninstall --tool claude
-```
-
-> 注意：安装时如已存在会提示使用 `--force`。使用 `--force` 会直接覆盖安装，无需确认。
-
-### 5.8 Skill 使用方式
-
-安装后在 Claude Code 中直接用自然语言操作飞书：
-- "帮我查一下明天的日程"
-- "把这个多维表格的记录导出来"
-- "在知识库创建一个新文档，标题是xxx"
-- "搜索包含'项目计划'的文档"
-
-Skill 会自动识别意图，调用 feishu 命令执行操作。
-
-### 5.9 Skill 架构
-
-```
-skills/feishu/              ← 唯一入口
-├── SKILL.md               ← 命令快速参考 + 导航表
-└── references/            ← 按需加载的领域知识
-    ├── bitable.md         ← 多维表格字段类型、筛选语法
-    ├── calendar.md        ← 日历忙闲、循环事件、参会人
-    ├── doc-create.md      ← 飞书 Markdown 语法
-    ├── doc-fetch.md       ← 文档内容获取
-    ├── doc-update.md      ← 7 种更新模式
-    ├── im-read.md         ← 消息搜索、资源下载
-    ├── task.md            ← 任务 CRUD、清单管理
-    ├── troubleshoot.md    ← 错误排查
-    ├── channel-rules.md   ← 消息格式规范
-    ├── field-properties.md ← 27 种字段类型配置
-    ├── record-values.md   ← 记录值数据格式
-    ├── examples.md        ← 使用场景示例
-    └── markdown-syntax.md ← 飞书 Markdown 差异
-```
-
-## 六、错误处理
+## 五、错误处理
 
 所有命令输出 JSON，出错时：
 
@@ -693,7 +644,7 @@ skills/feishu/              ← 唯一入口
 - 日志和错误输出到 stderr
 - 使用 `2>/dev/null` 可抑制日志行：`feishu calendar event list 2>/dev/null`
 
-## 七、通用约定
+## 六、通用约定
 
 - 时间戳使用 **ISO 8601** 格式（日历/任务 API）
 - ID 字段需带前缀：`ou_`（用户）、`oc_`（群聊）、`om_`（消息）
