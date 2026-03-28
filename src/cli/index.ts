@@ -9,14 +9,18 @@
  */
 
 import { Command } from 'commander';
+import { createRequire } from 'node:module';
 import { loadConfig } from './config.js';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../../package.json');
 
 const program = new Command();
 
 program
   .name('feishu')
   .description('Standalone Feishu/Lark CLI tool')
-  .version('1.0.0')
+  .version(version)
   .option('-a, --account <id>', 'Account ID to use', 'default')
   .hook('preAction', () => {
     // Skip config validation for skill and help commands

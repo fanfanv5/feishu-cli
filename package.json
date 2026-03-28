@@ -1,6 +1,6 @@
 {
   "name": "@fanfanv5/feishu-cli",
-  "version": "2.0.3",
+  "version": "2.0.5",
   "description": "Standalone Feishu/Lark CLI tool for Claude Code",
   "type": "module",
   "bin": {
